@@ -20,12 +20,12 @@ show_loading_screen:
     ; Clear screen to black FIRST
     call clear_screen_black
     
-    ; Draw "Loading..." text (normal size, clear)
-    mov eax, 120        ; x position
+    ; Draw "Loading..." text (large and clear)
+    mov eax, 80         ; x position
     mov ebx, 70         ; y position
     mov esi, loading_message
     mov edi, 0x0F       ; white color
-    call draw_text
+    call draw_large_text
     
     ; Draw loading bar background (gray border)
     mov eax, 60         ; x position
@@ -35,7 +35,7 @@ show_loading_screen:
     mov esi, 0x08       ; dark gray color
     call draw_filled_rectangle
     
-    ; Animate loading bar (5 seconds total, 200 steps)
+    ; Animate loading bar (5 seconds total, 100 steps)
     mov ebx, 0          ; progress counter
 .loading_loop:
     cmp ebx, 196        ; full width (minus border)
@@ -51,23 +51,23 @@ show_loading_screen:
     call draw_filled_rectangle
     pop ebx
     
-    ; 5 second delay: 196 steps for full bar, ~25ms per step = 5 seconds
+    ; 5 second delay: 100 steps * 50ms = 5 seconds
     push ebx
-    mov ecx, 0x200000   ; Larger delay for ~25ms per step
+    mov ecx, 0x80000    ; ~50ms delay per step
 .delay_loop:
     loop .delay_loop
     pop ebx
     
-    inc ebx             ; increase progress by 1 pixel (slower)
+    add ebx, 2          ; increase progress by 2 pixels
     jmp .loading_loop
     
 .loading_done:
     ; Show "Complete!" message
-    mov eax, 100        ; x position
+    mov eax, 85         ; x position
     mov ebx, 130        ; y position
     mov esi, complete_message
     mov edi, 0x0A       ; bright green color
-    call draw_text
+    call draw_large_text
     
     ; Final delay
     mov ecx, 0x300000
@@ -150,7 +150,7 @@ draw_large_text:
     pop eax
     ret
 
-; Draw regular text (simplified version)
+; Draw regular text
 ; EAX = x, EBX = y, ESI = text pointer, EDI = color
 draw_text:
     push eax
@@ -161,15 +161,11 @@ draw_text:
     cmp cl, 0           ; Check for null terminator
     je .done
     
-    ; Draw character using simple method
+    ; Draw character
     push esi
     push edi
-    push eax
-    push ebx
     movzx ecx, cl       ; Character code
-    call draw_char_simple
-    pop ebx
-    pop eax
+    call draw_char
     pop edi
     pop esi
     
@@ -180,95 +176,6 @@ draw_text:
 .done:
     pop ebx
     pop eax
-    ret
-
-; Simple character drawing function with better font data
-; EAX = x, EBX = y, ECX = character code, EDI = color
-draw_char_simple:
-    push eax
-    push ebx
-    push ecx
-    push edx
-    push esi
-    
-    ; Handle only printable characters (space to Z)
-    cmp cl, 0x20        ; Space
-    jl .char_done
-    cmp cl, 0x5A        ; Z
-    jg .char_done
-    
-    ; Get font pattern for character
-    sub cl, 0x20        ; Adjust to font table index
-    movzx ecx, cl
-    mov esi, simple_font
-    imul ecx, 8         ; Each character is 8 bytes
-    add esi, ecx
-    
-    ; Draw 8x8 character
-    mov edx, 0          ; Row counter
-.row_loop:
-    cmp edx, 8
-    jge .char_done
-    
-    mov cl, [esi + edx] ; Get row pattern
-    push eax            ; Save x position
-    
-    ; Draw 8 pixels in this row
-    mov ch, 8           ; Pixel counter
-.pixel_loop:
-    test cl, 0x80       ; Test leftmost bit
-    jz .skip_pixel
-    
-    ; Draw pixel
-    call draw_single_pixel
-    
-.skip_pixel:
-    shl cl, 1           ; Shift to next bit
-    inc eax             ; Next x position
-    dec ch
-    jnz .pixel_loop
-    
-    pop eax             ; Restore x position
-    inc ebx             ; Next row
-    inc edx
-    jmp .row_loop
-    
-.char_done:
-    pop esi
-    pop edx
-    pop ecx
-    pop ebx
-    pop eax
-    ret
-
-; Draw a single pixel at EAX,EBX with color EDI
-draw_single_pixel:
-    pusha
-    
-    ; Bounds check
-    cmp eax, 0
-    jl .done
-    cmp eax, 320
-    jge .done
-    cmp ebx, 0
-    jl .done
-    cmp ebx, 200
-    jge .done
-    
-    ; Calculate pixel address: 0xA0000 + (y * 320) + x
-    push eax
-    mov eax, ebx
-    mov edx, 320
-    mul edx             ; EAX = y * 320
-    pop edx             ; EDX = x
-    add eax, edx        ; EAX = (y * 320) + x
-    add eax, 0xA0000    ; Add VGA base address
-    
-    ; Set pixel
-    mov [eax], dil      ; Store color (low byte of EDI)
-    
-.done:
-    popa
     ret
 
 ; Draw a single character at 2x scale (16x16)
@@ -323,10 +230,7 @@ draw_large_char:
     sub ch, cl          ; Reverse bit order
     push eax
     mov al, [esi + edx]
-    push ecx
-    mov cl, ch
-    shr al, cl
-    pop ecx
+    shr al, ch
     and al, 1
     cmp al, 1
     pop eax
@@ -398,10 +302,7 @@ draw_char:
     sub ch, cl          ; Reverse bit order
     push eax
     mov al, [esi + edx]
-    push ecx
-    mov cl, ch
-    shr al, cl
-    pop ecx
+    shr al, ch
     and al, 1
     cmp al, 1
     pop eax
