@@ -10,7 +10,7 @@ if not exist build mkdir build
 
 REM Build bootloader
 echo [1/3] Building GUI bootloader...
-nasm -f bin boot.asm -o build\boot.bin
+nasm -f bin src\boot.asm -o build\boot.bin
 if %errorlevel% neq 0 (
     echo Error: Failed to build bootloader
     pause
@@ -20,7 +20,7 @@ echo ✓ Bootloader built successfully.
 
 REM Build GUI kernel
 echo [2/3] Building GUI kernel...
-nasm -f bin kernel.asm -o build\kernel.bin
+nasm -f bin src\kernel.asm -o build\kernel.bin
 if %errorlevel% neq 0 (
     echo Error: Failed to build GUI kernel
     pause
@@ -53,8 +53,8 @@ echo   qemu-system-i386 -drive format=raw,file=build\os.img,if=ide,index=0,media
 echo.
 echo Features:
 echo   - 320x200x256 VGA graphics mode
-echo   - Basic GUI with windows and buttons
+echo   - Real bitmap font text rendering
 echo   - Mouse cursor support
-echo   - Keyboard interaction (SPACE for button, ESC to exit)
+echo   - Keyboard interaction (ESC to exit)
 echo.
 pause
