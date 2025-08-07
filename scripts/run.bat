@@ -1,0 +1,3 @@
+@echo off
+echo Starting GUI-enabled OS in QEMU...
+qemu-system-i386 -drive format=raw,file=build\os.img,if=ide,index=0,media=disk -vga std
