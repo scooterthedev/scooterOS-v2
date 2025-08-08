@@ -86,40 +86,354 @@ clear_screen_black:
 
 ; Show main GUI after loading
 show_main_gui:
-    ; Clear screen to green
+    ; Clear entire screen to desktop color first
     mov edi, 0xA0000    ; VGA graphics buffer
     mov ecx, 64000      ; 320x200 pixels
-    mov al, 0x02        ; Green background
+    mov al, 0x03        ; Cyan desktop background
     rep stosb
     
-    ; Draw test rectangles
-    mov eax, 50         ; x
-    mov ebx, 50         ; y
-    mov ecx, 100        ; width
-    mov edx, 80         ; height
-    mov esi, 0x04       ; red color
-    call draw_filled_rectangle
+    ; Draw taskbar
+    call draw_taskbar
     
-    mov eax, 170        ; x
-    mov ebx, 70         ; y
-    mov ecx, 80         ; width
-    mov edx, 60         ; height
-    mov esi, 0x01       ; blue color
-    call draw_filled_rectangle
-    
-    ; Draw messages
-    mov eax, 60         ; x position
-    mov ebx, 160        ; y position
-    mov esi, gui_message
-    mov edi, 0x0F       ; white color
+    ; Draw desktop title with better positioning
+    mov eax, 20         ; x position
+    mov ebx, 20         ; y position
+    mov esi, desktop_message
+    mov edi, 0x00       ; black color for better visibility
     call draw_text
     
-    mov eax, 60
-    mov ebx, 175
-    mov esi, exit_message
-    mov edi, 0x0E       ; yellow color
+    ; Draw navigation instructions with better spacing
+    mov eax, 20
+    mov ebx, 35
+    mov esi, nav_message1
+    mov edi, 0x00       ; black color
     call draw_text
     
+    mov eax, 20
+    mov ebx, 50
+    mov esi, nav_message2
+    mov edi, 0x00       ; black color
+    call draw_text
+    
+    ; Draw some desktop icons as placeholders
+    call draw_desktop_icons
+    
+    ret
+
+; Draw desktop icons
+draw_desktop_icons:
+    ; Draw a "My Computer" icon
+    mov eax, 40         ; x
+    mov ebx, 80         ; y
+    mov ecx, 32         ; width
+    mov edx, 32         ; height
+    mov esi, 0x07       ; light gray
+    call draw_filled_rectangle
+    
+    ; Icon border
+    mov eax, 40
+    mov ebx, 80
+    mov ecx, 32
+    mov edx, 1
+    mov esi, 0x00       ; black border
+    call draw_filled_rectangle
+    
+    mov eax, 40
+    mov ebx, 111
+    mov ecx, 32
+    mov edx, 1
+    mov esi, 0x00
+    call draw_filled_rectangle
+    
+    mov eax, 40
+    mov ebx, 80
+    mov ecx, 1
+    mov edx, 32
+    mov esi, 0x00
+    call draw_filled_rectangle
+    
+    mov eax, 71
+    mov ebx, 80
+    mov ecx, 1
+    mov edx, 32
+    mov esi, 0x00
+    call draw_filled_rectangle
+    
+    ; Icon label
+    mov eax, 35
+    mov ebx, 120
+    mov esi, computer_icon_text
+    mov edi, 0x00
+    call draw_text
+    
+    ; Draw a "Folder" icon
+    mov eax, 120        ; x
+    mov ebx, 80         ; y
+    mov ecx, 32         ; width
+    mov edx, 32         ; height
+    mov esi, 0x0E       ; yellow folder
+    call draw_filled_rectangle
+    
+    ; Folder icon borders
+    mov eax, 120
+    mov ebx, 80
+    mov ecx, 32
+    mov edx, 1
+    mov esi, 0x00
+    call draw_filled_rectangle
+    
+    mov eax, 120
+    mov ebx, 111
+    mov ecx, 32
+    mov edx, 1
+    mov esi, 0x00
+    call draw_filled_rectangle
+    
+    mov eax, 120
+    mov ebx, 80
+    mov ecx, 1
+    mov edx, 32
+    mov esi, 0x00
+    call draw_filled_rectangle
+    
+    mov eax, 151
+    mov ebx, 80
+    mov ecx, 1
+    mov edx, 32
+    mov esi, 0x00
+    call draw_filled_rectangle
+    
+    ; Folder label
+    mov eax, 120
+    mov ebx, 120
+    mov esi, folder_icon_text
+    mov edi, 0x00
+    call draw_text
+    
+    ret
+
+; Draw taskbar at bottom of screen
+draw_taskbar:
+    ; Draw taskbar background (dark gray)
+    mov eax, 0          ; x
+    mov ebx, 175        ; y (bottom 25 pixels)
+    mov ecx, 320        ; width (full screen)
+    mov edx, 25         ; height
+    mov esi, 0x08       ; dark gray color
+    call draw_filled_rectangle
+    
+    ; Draw taskbar top border (raised effect)
+    mov eax, 0          ; x
+    mov ebx, 175        ; y
+    mov ecx, 320        ; width
+    mov edx, 1          ; height (1 pixel line)
+    mov esi, 0x0F       ; white color for raised effect
+    call draw_filled_rectangle
+    
+    ; Draw taskbar bottom border
+    mov eax, 0          ; x
+    mov ebx, 199        ; y (bottom line)
+    mov ecx, 320        ; width
+    mov edx, 1          ; height
+    mov esi, 0x00       ; black color
+    call draw_filled_rectangle
+    
+    ; Draw Start button
+    mov eax, 3          ; x
+    mov ebx, 178        ; y
+    mov ecx, 50         ; width
+    mov edx, 19         ; height
+    call draw_taskbar_button
+    
+    ; Draw Start text
+    mov eax, 13         ; x position (centered)
+    mov ebx, 185        ; y position
+    mov esi, start_text
+    mov edi, 0x00       ; black color for better contrast
+    call draw_text
+    
+    ; Draw separator line after Start button
+    mov eax, 56         ; x
+    mov ebx, 178        ; y
+    mov ecx, 1          ; width
+    mov edx, 19         ; height
+    mov esi, 0x00       ; black separator
+    call draw_filled_rectangle
+    
+    ; Draw app slots (placeholder buttons for future apps)
+    mov eax, 60         ; x start position
+    mov ebx, 0          ; button counter
+.draw_app_slots:
+    cmp ebx, 4          ; Draw 4 app slots
+    jge .slots_done
+    
+    push eax
+    push ebx
+    
+    ; Calculate button position
+    push eax
+    mov eax, ebx
+    mov ecx, 60         ; button width + spacing
+    mul ecx
+    pop ecx
+    add eax, ecx        ; final x position
+    
+    ; Draw app button
+    mov ebx, 178        ; y
+    mov ecx, 55         ; width
+    mov edx, 19         ; height
+    call draw_taskbar_app_button
+    
+    ; Draw app slot number
+    push eax
+    push ebx
+    add eax, 25         ; center text in button
+    mov ebx, 185
+    mov cl, [esp+4]     ; get original button counter
+    add cl, '1'         ; convert to 1-4
+    mov [temp_char], cl
+    mov byte [temp_char+1], 0
+    mov esi, temp_char
+    mov edi, 0x07       ; light gray text
+    call draw_text
+    pop ebx
+    pop eax
+    
+    pop ebx
+    pop eax
+    inc ebx
+    jmp .draw_app_slots
+    
+.slots_done:
+    ; Draw clock area with border
+    mov eax, 265        ; x
+    mov ebx, 178        ; y
+    mov ecx, 50         ; width
+    mov edx, 19         ; height
+    mov esi, 0x07       ; light gray for clock
+    call draw_filled_rectangle
+    
+    ; Clock border
+    mov eax, 265
+    mov ebx, 178
+    mov ecx, 50
+    mov edx, 1
+    mov esi, 0x00       ; black top border
+    call draw_filled_rectangle
+    
+    mov eax, 265
+    mov ebx, 196
+    mov ecx, 50
+    mov edx, 1
+    mov esi, 0x0F       ; white bottom border
+    call draw_filled_rectangle
+    
+    ; Draw clock text
+    mov eax, 275        ; x position (centered)
+    mov ebx, 185        ; y position
+    mov esi, clock_text
+    mov edi, 0x00       ; black color
+    call draw_text
+    
+    ret
+
+; Draw a taskbar button (Start button style)
+; EAX = x, EBX = y, ECX = width, EDX = height
+draw_taskbar_button:
+    push eax
+    push ebx
+    push ecx
+    push edx
+    
+    ; Check if this is the selected button (Start is button 0)
+    cmp byte [selected_button], 0
+    je .draw_selected
+    
+    ; Draw normal button (raised effect)
+    mov esi, 0x07       ; light gray
+    call draw_filled_rectangle
+    
+    ; Draw highlight on top and left
+    mov esi, 0x0F       ; white
+    push ecx
+    push edx
+    mov ecx, [esp+12]   ; original width
+    mov edx, 1          ; 1 pixel height
+    call draw_filled_rectangle  ; top edge
+    
+    mov ecx, 1          ; 1 pixel width
+    mov edx, [esp]      ; original height
+    call draw_filled_rectangle  ; left edge
+    pop edx
+    pop ecx
+    
+    jmp .button_done
+    
+.draw_selected:
+    ; Draw selected button (pressed effect)
+    mov esi, 0x08       ; darker gray
+    call draw_filled_rectangle
+    
+    ; Draw shadow on top and left
+    mov esi, 0x00       ; black
+    push ecx
+    push edx
+    mov ecx, [esp+12]   ; original width
+    mov edx, 1          ; 1 pixel height
+    call draw_filled_rectangle  ; top edge
+    
+    mov ecx, 1          ; 1 pixel width
+    mov edx, [esp]      ; original height
+    call draw_filled_rectangle  ; left edge
+    pop edx
+    pop ecx
+    
+.button_done:
+    pop edx
+    pop ecx
+    pop ebx
+    pop eax
+    ret
+
+; Draw a taskbar app button slot
+; EAX = x, EBX = y, ECX = width, EDX = height
+draw_taskbar_app_button:
+    push eax
+    push ebx
+    push ecx
+    push edx
+    push esi
+    
+    ; Calculate which app button this is (1-4)
+    mov esi, eax
+    sub esi, 60         ; subtract start position
+    push edx
+    mov edx, 0
+    mov ecx, 60         ; button spacing
+    div ecx             ; EAX = button number
+    inc eax             ; buttons are 1-4, not 0-3
+    pop edx
+    
+    ; Check if this is the selected button
+    cmp al, [selected_button]
+    je .draw_app_selected
+    
+    ; Draw normal app slot (slightly depressed)
+    mov esi, 0x08       ; dark gray
+    call draw_filled_rectangle
+    jmp .app_done
+    
+.draw_app_selected:
+    ; Draw selected app slot (highlighted)
+    mov esi, 0x0B       ; cyan
+    call draw_filled_rectangle
+    
+.app_done:
+    pop esi
+    pop edx
+    pop ecx
+    pop ebx
+    pop eax
     ret
 
 ; Draw regular text (simplified version)
@@ -310,10 +624,20 @@ draw_filled_rectangle:
     pop eax
     ret
 
-; Simple infinite loop with basic keyboard check
+; Enhanced infinite loop with taskbar navigation
 infinite_loop:
+    ; Check for keyboard input
+    in al, 0x60         ; Read keyboard scan code
+    
+    ; Check for Tab key (0x0F) - navigate between taskbar items
+    cmp al, 0x0F
+    je handle_tab_key
+    
+    ; Check for Enter key (0x1C) - activate selected item
+    cmp al, 0x1C
+    je handle_enter_key
+    
     ; Check for ESC key to reboot
-    in al, 0x60         ; Read keyboard
     cmp al, 0x01        ; ESC key scan code
     je reboot_system
     
@@ -323,6 +647,106 @@ infinite_loop:
     loop .delay
     
     jmp infinite_loop
+
+; Handle Tab key - cycle through taskbar items
+handle_tab_key:
+    ; Wait for key release to avoid multiple triggers
+    call wait_key_release
+    
+    ; Increment selected button (0=Start, 1-4=Apps)
+    inc byte [selected_button]
+    cmp byte [selected_button], 5
+    jl .tab_redraw
+    mov byte [selected_button], 0  ; wrap to start
+    
+.tab_redraw:
+    ; Clear feedback area first
+    mov eax, 10
+    mov ebx, 55
+    mov ecx, 200
+    mov edx, 30
+    mov esi, 0x03       ; cyan to match desktop
+    call draw_filled_rectangle
+    
+    ; Redraw taskbar to show new selection
+    call draw_taskbar
+    
+    ; Show which item is selected
+    mov eax, 10
+    mov ebx, 55
+    mov esi, selection_msg
+    mov edi, 0x00       ; black color
+    call draw_text
+    
+    ; Draw selected button number
+    mov eax, 150
+    mov ebx, 55
+    mov cl, [selected_button]
+    add cl, '0'        ; convert to ASCII
+    mov [temp_char], cl
+    mov byte [temp_char+1], 0
+    mov esi, temp_char
+    mov edi, 0x00       ; black color
+    call draw_text
+    
+    jmp infinite_loop
+
+; Handle Enter key - activate selected taskbar item
+handle_enter_key:
+    ; Wait for key release
+    call wait_key_release
+    
+    ; Clear feedback area
+    mov eax, 10
+    mov ebx, 70
+    mov ecx, 250
+    mov edx, 15
+    mov esi, 0x03       ; cyan to match desktop
+    call draw_filled_rectangle
+    
+    ; Check which button is selected
+    mov al, [selected_button]
+    
+    cmp al, 0
+    je activate_start
+    
+    ; For app buttons (1-4), show placeholder message
+    mov eax, 10
+    mov ebx, 70
+    mov esi, app_placeholder_msg
+    mov edi, 0x00       ; black color
+    call draw_text
+    
+    ; Show which app slot was clicked
+    mov eax, 200
+    mov ebx, 70
+    mov cl, [selected_button]
+    add cl, '0'
+    mov [temp_char], cl
+    mov byte [temp_char+1], 0
+    mov esi, temp_char
+    mov edi, 0x00       ; black color
+    call draw_text
+    
+    jmp infinite_loop
+
+activate_start:
+    ; Show start menu placeholder
+    mov eax, 10
+    mov ebx, 70
+    mov esi, start_menu_msg
+    mov edi, 0x00       ; black color
+    call draw_text
+    
+    jmp infinite_loop
+
+; Wait for key release (scan code with bit 7 set)
+wait_key_release:
+.wait_loop:
+    in al, 0x60
+    test al, 0x80       ; Check if release code (bit 7 set)
+    jz .wait_loop       ; Keep waiting if still pressed
+    ret
 
 reboot_system:
     ; Reboot via keyboard controller
@@ -338,6 +762,22 @@ loading_message db 'Loading...', 0
 complete_message db 'Complete!', 0
 gui_message db 'GUI OS v1.0', 0
 exit_message db 'Press ESC to exit', 0
+
+; Desktop and taskbar messages
+desktop_message db 'ScooterOS Desktop', 0
+nav_message1 db 'Use TAB to navigate taskbar', 0
+nav_message2 db 'Use ENTER to select items', 0
+start_text db 'Start', 0
+clock_text db '12:00', 0
+selection_msg db 'Selected: ', 0
+app_placeholder_msg db 'App slot clicked: ', 0
+start_menu_msg db 'Start menu opened!', 0
+computer_icon_text db 'Computer', 0
+folder_icon_text db 'Folder', 0
+
+; Navigation state
+selected_button db 0        ; 0=Start, 1-4=App slots
+temp_char db 0, 0          ; Temporary character storage
 
 ; Simple font data (space to Z) - much cleaner patterns
 simple_font:
