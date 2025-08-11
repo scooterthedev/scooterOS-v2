@@ -212,6 +212,137 @@ draw_desktop_icons:
     
     ret
 
+; Display memory information on desktop
+display_memory_info:
+    ; Check if memory system is initialized
+    cmp dword [heap_start], 0
+    je .skip_memory_display
+    
+    ; Get current memory stats
+    call get_memory_stats
+    mov [mem_allocated], eax
+    mov [mem_count], ebx
+    mov [mem_free], ecx
+    
+    ; Display memory info title
+    mov eax, 200
+    mov ebx, 20
+    mov esi, memory_title
+    mov edi, 0x00
+    call draw_text
+    
+    ; Display allocated memory
+    mov eax, 200
+    mov ebx, 35
+    mov esi, allocated_text
+    mov edi, 0x00
+    call draw_text
+    
+    ; Convert allocated bytes to string and display
+    mov eax, [mem_allocated]
+    call convert_number_to_string
+    mov eax, 270
+    mov ebx, 35
+    mov esi, number_buffer
+    mov edi, 0x00
+    call draw_text
+    
+    ; Display allocation count
+    mov eax, 200
+    mov ebx, 50
+    mov esi, count_text
+    mov edi, 0x00
+    call draw_text
+    
+    mov eax, [mem_count]
+    call convert_number_to_string
+    mov eax, 250
+    mov ebx, 50
+    mov esi, number_buffer
+    mov edi, 0x00
+    call draw_text
+    
+    ; Display free memory
+    mov eax, 200
+    mov ebx, 65
+    mov esi, free_text
+    mov edi, 0x00
+    call draw_text
+    
+    mov eax, [mem_free]
+    call convert_number_to_string
+    mov eax, 240
+    mov ebx, 65
+    mov esi, number_buffer
+    mov edi, 0x00
+    call draw_text
+    
+    ; Display test instruction
+    mov eax, 200
+    mov ebx, 85
+    mov esi, test_instruction
+    mov edi, 0x04       ; red color
+    call draw_text
+    
+.skip_memory_display:
+    ret
+
+; Convert a number to string (simple version for small numbers)
+; Input: EAX = number
+; Output: number_buffer contains ASCII string
+convert_number_to_string:
+    push ebx
+    push ecx
+    push edx
+    push esi
+    push edi
+    
+    ; Handle zero case
+    test eax, eax
+    jnz .not_zero
+    mov byte [number_buffer], '0'
+    mov byte [number_buffer+1], 0
+    jmp .convert_done
+    
+.not_zero:
+    mov edi, number_buffer + 8  ; Start from end of buffer (safer)
+    mov byte [edi], 0           ; Null terminator
+    dec edi
+    
+    mov ebx, 10                 ; Divisor
+    
+.convert_loop:
+    xor edx, edx
+    div ebx                     ; EAX = quotient, EDX = remainder
+    add dl, '0'                 ; Convert to ASCII
+    mov [edi], dl
+    dec edi
+    
+    test eax, eax
+    jnz .convert_loop
+    
+    ; Move string to start of buffer
+    inc edi                     ; Point to first digit
+    mov esi, edi
+    mov edi, number_buffer
+    
+.copy_loop:
+    mov al, [esi]
+    mov [edi], al
+    test al, al
+    jz .convert_done
+    inc esi
+    inc edi
+    jmp .copy_loop
+    
+.convert_done:
+    pop edi
+    pop esi
+    pop edx
+    pop ecx
+    pop ebx
+    ret
+
 ; Draw taskbar at bottom of screen
 draw_taskbar:
     ; Draw taskbar background (dark gray)
@@ -740,12 +871,226 @@ activate_start:
     
     jmp infinite_loop
 
+; Handle M key - test memory system
+handle_memory_test:
+    ; Wait for key release
+    call wait_key_release
+    
+    ; Run memory test
+    call test_memory_system
+    
+    ; Redraw GUI to show updated memory stats
+    call show_main_gui
+    
+    jmp infinite_loop
+
 ; Wait for key release (scan code with bit 7 set)
 wait_key_release:
 .wait_loop:
     in al, 0x60
     test al, 0x80       ; Check if release code (bit 7 set)
     jz .wait_loop       ; Keep waiting if still pressed
+    ret
+
+; =====================================
+; MEMORY MANAGEMENT SYSTEM
+; =====================================
+
+; Initialize memory management system
+init_memory_manager:
+    ; Set up heap starting at 0x100000 (1MB) - use safer smaller heap
+    mov dword [heap_start], 0x100000
+    mov dword [heap_current], 0x100000
+    mov dword [heap_end], 0x180000      ; 512KB heap size (safer)
+    mov dword [total_allocated], 0
+    mov dword [allocation_count], 0
+    
+    ; Don't clear memory at boot - just set up pointers
+    ; The heap will be initialized on first allocation
+    
+    ret
+
+; Allocate memory block
+; Input: EAX = size in bytes
+; Output: EAX = pointer to allocated memory (0 if failed)
+malloc:
+    push ebx
+    push ecx
+    push edx
+    push esi
+    push edi
+    
+    ; Align size to 16 bytes
+    add eax, 15
+    and eax, 0xFFFFFFF0
+    mov ebx, eax                        ; EBX = aligned size
+    
+    ; Add header size (16 bytes)
+    add ebx, 16
+    
+    ; Find free block
+    mov esi, [heap_start]
+.find_block:
+    cmp esi, [heap_current]
+    jge .allocate_new
+    
+    ; Check if block is free (size = 0) and big enough
+    mov eax, [esi]                      ; Get block size
+    cmp eax, 0                          ; Is it free?
+    jne .next_block
+    
+    ; Check if we have enough space from here to heap_current
+    mov eax, [heap_current]
+    sub eax, esi
+    cmp eax, ebx
+    jl .next_block
+    
+    ; Found suitable free block
+    jmp .allocate_here
+    
+.next_block:
+    ; Move to next block
+    mov eax, [esi]                      ; Get block size
+    add esi, eax                        ; Move to next block
+    add esi, 16                         ; Add header size
+    jmp .find_block
+    
+.allocate_new:
+    ; Allocate at end of heap
+    mov esi, [heap_current]
+    
+.allocate_here:
+    ; Check if we have enough space in heap
+    mov eax, esi
+    add eax, ebx
+    cmp eax, [heap_end]
+    jg .allocation_failed
+    
+    ; Set up block header
+    mov [esi], ebx                      ; Store total block size
+    mov dword [esi + 4], 0xDEADBEEF     ; Magic number
+    mov dword [esi + 8], ebx            ; Store requested size
+    mov dword [esi + 12], 0             ; Reserved
+    
+    ; Update heap current if we allocated at the end
+    cmp esi, [heap_current]
+    jne .update_stats
+    add [heap_current], ebx
+    
+.update_stats:
+    ; Update allocation statistics
+    add [total_allocated], ebx
+    inc dword [allocation_count]
+    
+    ; Return pointer to usable memory (after header)
+    mov eax, esi
+    add eax, 16
+    jmp .malloc_done
+    
+.allocation_failed:
+    xor eax, eax                        ; Return NULL
+    
+.malloc_done:
+    pop edi
+    pop esi
+    pop edx
+    pop ecx
+    pop ebx
+    ret
+
+; Free memory block
+; Input: EAX = pointer to memory block
+free:
+    push ebx
+    push ecx
+    push edx
+    
+    ; Check for NULL pointer
+    test eax, eax
+    jz .free_done
+    
+    ; Get block header (subtract 16 bytes)
+    sub eax, 16
+    mov ebx, eax
+    
+    ; Validate magic number
+    cmp dword [ebx + 4], 0xDEADBEEF
+    jne .free_done                      ; Invalid block
+    
+    ; Get block size
+    mov ecx, [ebx]
+    
+    ; Mark block as free (set size to 0)
+    mov dword [ebx], 0
+    mov dword [ebx + 4], 0xFEEDFACE     ; Free magic number
+    
+    ; Update statistics
+    sub [total_allocated], ecx
+    dec dword [allocation_count]
+    
+.free_done:
+    pop edx
+    pop ecx
+    pop ebx
+    ret
+
+; Get memory statistics
+; Output: EAX = total allocated, EBX = allocation count, ECX = free space
+get_memory_stats:
+    mov eax, [total_allocated]
+    mov ebx, [allocation_count]
+    mov ecx, [heap_end]
+    sub ecx, [heap_current]             ; Free space = heap_end - heap_current
+    ret
+
+; Clear all allocated memory (reset heap)
+reset_heap:
+    mov eax, [heap_start]
+    mov [heap_current], eax
+    mov dword [total_allocated], 0
+    mov dword [allocation_count], 0
+    
+    ; Clear the first block header
+    mov edi, [heap_start]
+    mov ecx, 16
+    xor eax, eax
+    rep stosb
+    ret
+
+; Memory test function - allocate and free some blocks
+test_memory_system:
+    push eax
+    push ebx
+    push ecx
+    
+    ; Allocate 100 bytes
+    mov eax, 100
+    call malloc
+    mov [test_ptr1], eax
+    
+    ; Allocate 200 bytes
+    mov eax, 200
+    call malloc
+    mov [test_ptr2], eax
+    
+    ; Allocate 50 bytes
+    mov eax, 50
+    call malloc
+    mov [test_ptr3], eax
+    
+    ; Free middle block
+    mov eax, [test_ptr2]
+    call free
+    
+    ; Get stats for display
+    call get_memory_stats
+    mov [mem_allocated], eax
+    mov [mem_count], ebx
+    mov [mem_free], ecx
+    
+    pop ecx
+    pop ebx
+    pop eax
     ret
 
 reboot_system:
@@ -775,9 +1120,30 @@ start_menu_msg db 'Start menu opened!', 0
 computer_icon_text db 'Computer', 0
 folder_icon_text db 'Folder', 0
 
+; Memory management strings
+memory_title db 'Memory Info:', 0
+allocated_text db 'Alloc:', 0
+count_text db 'Count:', 0
+free_text db 'Free:', 0
+test_instruction db 'Press M to test', 0
+number_buffer db '0000000000', 0    ; Buffer for number conversion
+
 ; Navigation state
 selected_button db 0        ; 0=Start, 1-4=App slots
 temp_char db 0, 0          ; Temporary character storage
+
+; Memory Management Variables
+heap_start dd 0             ; Start of heap
+heap_current dd 0           ; Current end of heap
+heap_end dd 0               ; End of heap
+total_allocated dd 0        ; Total allocated memory
+allocation_count dd 0       ; Number of allocations
+test_ptr1 dd 0              ; Test pointers
+test_ptr2 dd 0
+test_ptr3 dd 0
+mem_allocated dd 0          ; Memory stats for display
+mem_count dd 0
+mem_free dd 0
 
 ; Simple font data (space to Z) - much cleaner patterns
 simple_font:
