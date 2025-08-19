@@ -1,4 +1,5 @@
-ENTRY(kernel_start)
+OUTPUT_FORMAT(binary)
+ENTRY(_start)
 
 SECTIONS
 {
@@ -10,6 +11,7 @@ SECTIONS
     
     .data : {
         *(.data)
+        *(.rodata)
     }
     
     .bss : {

@@ -1,8 +1,8 @@
 @echo off
 setlocal enabledelayedexpansion
 
-echo GUI-Enabled 32-bit OS Builder
-echo ==============================
+echo GUI-Enabled 32-bit OS Builder (Assembly Only)
+echo ================================================
 echo.
 
 REM Check if build directory exists, create if not
@@ -18,7 +18,7 @@ if %errorlevel% neq 0 (
 )
 echo ✓ Bootloader built successfully.
 
-REM Build GUI kernel
+REM Build GUI kernel (back to binary format for now)
 echo [2/3] Building GUI kernel...
 nasm -f bin src\kernel.asm -o build\kernel.bin
 if %errorlevel% neq 0 (
@@ -41,7 +41,7 @@ echo ✓ GUI OS image created successfully.
 echo.
 echo Build successful!
 echo.
-set /p run="Run GUI OS in QEMU? (y/n): "
+set /p run="Run GUI OS with CLI in QEMU? (y/n): "
 if /i "%run%"=="y" (
     echo Starting QEMU with VGA graphics support...
     qemu-system-i386 -drive format=raw,file=build\os.img,if=ide,index=0,media=disk -vga std
@@ -53,8 +53,9 @@ echo   qemu-system-i386 -drive format=raw,file=build\os.img,if=ide,index=0,media
 echo.
 echo Features:
 echo   - 320x200x256 VGA graphics mode
-echo   - Real bitmap font text rendering
+echo   - Real bitmap font text rendering  
 echo   - Mouse cursor support
-echo   - Keyboard interaction (ESC to exit)
+echo   - Keyboard interaction
+echo   - File system and CLI (Press F or SPACE to activate)
 echo.
 pause

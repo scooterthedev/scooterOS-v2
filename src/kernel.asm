@@ -2,17 +2,18 @@
 [ORG 0x1000]
 
 ; Simple GUI-Enabled 32-bit Kernel Entry Point
-kernel_start:
+_start:
     ; Set up stack
     mov esp, 0x90000
 
     ; Show loading screen IMMEDIATELY (before anything else)
     call show_loading_screen
 
-    ; After loading, show the main GUI
+    ; Show desktop and wait for input
     call show_main_gui
+    call main_loop
 
-    ; Simple infinite loop
+    ; Fallback infinite loop (should never reach here)
     jmp infinite_loop
 
 ; Show loading screen with black background and animated progress bar
@@ -113,6 +114,13 @@ show_main_gui:
     mov ebx, 50
     mov esi, nav_message2
     mov edi, 0x00       ; black color
+    call draw_text
+    
+    ; Draw CLI instruction
+    mov eax, 20
+    mov ebx, 65
+    mov esi, cli_message
+    mov edi, 0x04       ; red color for visibility
     call draw_text
     
     ; Draw some desktop icons as placeholders
@@ -755,6 +763,117 @@ draw_filled_rectangle:
     pop eax
     ret
 
+; Main event loop
+main_loop:
+    ; Skip mouse cursor for now - we'll implement simple keyboard input
+    
+.input_loop:
+    ; Check for keyboard input
+    in al, 0x60         ; Read keyboard scan code
+    
+    ; Debug: Show scan code
+    push eax
+    mov eax, 250
+    mov ebx, 10
+    mov esi, scan_debug_msg
+    mov edx, 0x0C       ; red text
+    call draw_text
+    pop eax
+    
+    ; Check for F key (0x21) or Space (0x39) to open CLI
+    cmp al, 0x21        ; F key
+    je activate_cli
+    cmp al, 0x39        ; Space key  
+    je activate_cli
+    
+    ; Check for ESC key (0x01) to exit
+    cmp al, 0x01
+    je infinite_loop
+    
+    ; Small delay and loop
+    mov ecx, 10000
+.delay:
+    nop
+    loop .delay
+    jmp .input_loop
+
+; Activate CLI interface
+activate_cli:
+    ; Wait for key release first
+    call wait_key_release
+    
+    ; Clear screen to black
+    mov edi, 0xA0000
+    mov ecx, 64000
+    mov al, 0x00        ; Black background
+    rep stosb
+    
+    ; Draw simple CLI window
+    mov eax, 20         ; x
+    mov ebx, 20         ; y  
+    mov ecx, 280        ; width
+    mov edx, 160        ; height
+    mov esi, 0x01       ; blue background
+    call draw_filled_rectangle
+    
+    ; Draw border
+    mov eax, 19
+    mov ebx, 19
+    mov ecx, 282
+    mov edx, 162
+    mov esi, 0x0F       ; white border
+    call draw_filled_rectangle
+    
+    ; Redraw inner area
+    mov eax, 21
+    mov ebx, 21
+    mov ecx, 278
+    mov edx, 158
+    mov esi, 0x01       ; blue background
+    call draw_filled_rectangle
+    
+    ; Show title
+    mov eax, 30
+    mov ebx, 35
+    mov esi, cli_prompt
+    mov edx, 0x0F       ; white text
+    call draw_text
+    
+    ; Show simple instruction
+    mov eax, 30
+    mov ebx, 55
+    mov esi, cli_help4  ; ESC to exit
+    mov edx, 0x0E       ; yellow text
+    call draw_text
+    
+    ; Wait for ESC to exit CLI
+.cli_loop:
+    in al, 0x60
+    cmp al, 0x01        ; ESC key
+    je .exit_cli
+    
+    ; Much longer delay to prevent issues
+    mov ecx, 50000
+.cli_delay:
+    nop
+    loop .cli_delay
+    jmp .cli_loop
+    
+.exit_cli:
+    call wait_key_release
+    call show_main_gui  ; Return to desktop
+    jmp main_loop
+
+; Wait for key release (scan code with bit 7 set)
+wait_key_release:
+    push eax
+.wait_loop:
+    in al, 0x60
+    test al, 0x80       ; Check if bit 7 is set (key release)
+    jz .wait_loop       ; Keep waiting if not released
+    pop eax
+    ret
+
 ; Enhanced infinite loop with taskbar navigation
 infinite_loop:
     ; Check for keyboard input
@@ -883,14 +1002,6 @@ handle_memory_test:
     call show_main_gui
     
     jmp infinite_loop
-
-; Wait for key release (scan code with bit 7 set)
-wait_key_release:
-.wait_loop:
-    in al, 0x60
-    test al, 0x80       ; Check if release code (bit 7 set)
-    jz .wait_loop       ; Keep waiting if still pressed
-    ret
 
 ; =====================================
 ; MEMORY MANAGEMENT SYSTEM
@@ -1112,6 +1223,7 @@ exit_message db 'Press ESC to exit', 0
 desktop_message db 'ScooterOS Desktop', 0
 nav_message1 db 'Use TAB to navigate taskbar', 0
 nav_message2 db 'Use ENTER to select items', 0
+cli_message db 'Press SPACEBAR for CLI', 0
 start_text db 'Start', 0
 clock_text db '12:00', 0
 selection_msg db 'Selected: ', 0
@@ -1119,6 +1231,16 @@ app_placeholder_msg db 'App slot clicked: ', 0
 start_menu_msg db 'Start menu opened!', 0
 computer_icon_text db 'Computer', 0
 folder_icon_text db 'Folder', 0
+
+; CLI interface strings
+cli_prompt db 'ScooterOS Command Line Interface', 0
+cli_help1 db 'Available Commands:', 0
+cli_help2 db '  help - Show this help', 0
+cli_help3 db '  ls   - List files', 0
+cli_help4 db '  ESC  - Exit CLI', 0
+
+; Debug message
+scan_debug_msg db 'Key detected!', 0
 
 ; Memory management strings
 memory_title db 'Memory Info:', 0
@@ -1229,6 +1351,105 @@ simple_font:
     db 0x66, 0x66, 0x66, 0x3C, 0x18, 0x18, 0x18, 0x00
     ; 0x5A - Z
     db 0x7E, 0x06, 0x0C, 0x18, 0x30, 0x60, 0x7E, 0x00
+
+; =====================================
+; ASSEMBLY HELPER FUNCTIONS FOR C CODE
+; =====================================
+
+; Export functions for C code
+global asm_clear_screen
+global asm_draw_pixel
+global asm_get_keyboard
+global asm_delay
+
+; Clear screen to specified color
+; void asm_clear_screen(unsigned char color)
+asm_clear_screen:
+    push ebp
+    mov ebp, esp
+    push edi
+    push eax
+    push ecx
+    
+    mov al, [ebp + 8]       ; Get color parameter
+    mov edi, 0xA0000        ; VGA memory
+    mov ecx, 64000          ; 320x200 pixels
+    rep stosb               ; Fill screen with color
+    
+    pop ecx
+    pop eax
+    pop edi
+    pop ebp
+    ret
+
+; Draw a single pixel
+; void asm_draw_pixel(int x, int y, unsigned char color)
+asm_draw_pixel:
+    push ebp
+    mov ebp, esp
+    push eax
+    push ebx
+    push edx
+    
+    mov eax, [ebp + 8]      ; x
+    mov ebx, [ebp + 12]     ; y
+    mov dl, [ebp + 16]      ; color
+    
+    ; Bounds check
+    cmp eax, 0
+    jl .done
+    cmp eax, 320
+    jge .done
+    cmp ebx, 0
+    jl .done
+    cmp ebx, 200
+    jge .done
+    
+    ; Calculate offset: y * 320 + x
+    push eax
+    mov eax, ebx
+    mov ebx, 320
+    mul ebx
+    pop ebx
+    add eax, ebx
+    add eax, 0xA0000
+    
+    ; Set pixel
+    mov [eax], dl
+    
+.done:
+    pop edx
+    pop ebx
+    pop eax
+    pop ebp
+    ret
+
+; Get keyboard scan code
+; unsigned char asm_get_keyboard(void)
+asm_get_keyboard:
+    push ebp
+    mov ebp, esp
+    
+    in al, 0x60     ; Read keyboard port
+    movzx eax, al   ; Zero extend to 32-bit
+    
+    pop ebp
+    ret
+
+; Simple delay function
+; void asm_delay(unsigned int count)
+asm_delay:
+    push ebp
+    mov ebp, esp
+    push ecx
+    
+    mov ecx, [ebp + 8]  ; Get count parameter
+.delay_loop:
+    loop .delay_loop
+    
+    pop ecx
+    pop ebp
+    ret
 
 ; Pad to ensure proper alignment
 times 4096-($-$$) db 0
